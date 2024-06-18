@@ -61,6 +61,8 @@ class CNN(nn.Module):
         self.window_sizes = window_sizes
         if is_instance(hidden_size, int):
             self.hidden_sizes = [hidden_size] * len(window_sizes)
+        elif is_instance(hidden_size, list):
+            self.hidden_sizes = hidden_size
         self.dropout_prob = dropout_prob
         self.logits_mechanism = logits_mechanism
         self.device = device
