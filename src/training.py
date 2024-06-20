@@ -2,8 +2,8 @@
 This file contains source code for the Trainer class to control the training
 procedure of a machine learning model implemented in pytorch.
     @author: Christoph S. Metzner
-    @date created: 06/18/2024
-    @last modified: 06/18/2024
+    @date created:  06/18/2024
+    @last modified: 06/19/2024
 """
 
 # Load libraries
@@ -69,14 +69,35 @@ class Trainer:
             print(f'Current validation loss: {val_loss}', flush=True)
 
             # Check for early stopping condition
-            if val_loss < self._best_val_loss:
-                self._best_val_loss = val_loss
-                self._patience_counter = 0
-                torch.save(self._model.state_dict(), self._paths_dict['model_path'])
-            else:
-                self._patience_counter += 1
-                if self._patience_counter >= self._patience:
-                    print(f'Patience == Patience Counter', flush=True)
-                    print('Apply early stopping of model training', flush=True)
-                    break
+            early_stopping = _early_stopping(val_loss=val_loss)
+            if early_stopping:
+                break
+
+    def _early_stopping(self, val_loss: torch.Tensor) -> bool:
+        if val_loss < self._best_val_loss:
+            self._best_val_loss = val_loss
+            self._patience_counter = 0
+            torch.save(self._model.state_dict(), self._paths_dict['model_path'])
+        else:
+            self._patience_counter += 1
+            if self._patience_counter >= self._patience:
+                print(f'Patience == Patience Counter', flush=True)
+                print('Apply early stopping of model training', flush=True)
+                return True
+        return False
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
