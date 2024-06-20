@@ -104,7 +104,30 @@ class Trainer:
             self._optimizer.zero_grad(set_to_none=True)
         return train_loss.detach().cpu().numpy()
 
+    def _validate(self, val_loader) -> torch.Tensor:
+        losses = torch.zeros(len(val_loader), device=self._device)
+        self._model.eval()
+        with torch.no_grad():
+            for b, batch in enumerate(val_loader):
+                if self._debugging:
+                    if b + 1 == 2:
+                        break
 
+                X = batch['X'].to(self._device, non_blocking=True)
+                Y = batch['Y'].to(self._device, non_blocking=True)
+                # A = batch['A'].to(self._device, non_blocking=True)  # Transformer Model
+
+                with torch.cuda.amp.autocast(enabled=True):
+                    if self._model_type in ['CLF']:
+                        logits = self._model(X, A)
+                    else:
+                        logits = self._model(X)
+                    
+                    val_loss = torch.zeros(1, device=self._device)
+                    val_loss = self._loss_fct(logits, Y)
+                    losses[b] = val_loss.detach()
+
+        return torch.mean(losses) 
 
 
     def _early_stopping(self, val_loss: torch.Tensor) -> bool:
