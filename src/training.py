@@ -3,7 +3,7 @@ This file contains source code for the Trainer class to control the training
 procedure of a machine learning model implemented in pytorch.
     @author: Christoph S. Metzner
     @date created:  06/18/2024
-    @last modified: 06/19/2024
+    @last modified: 06/20/2024
 """
 
 # Load libraries
