@@ -144,6 +144,51 @@ class Trainer:
 
         return torch.mean(losses)
 
+    def predict(self, inf_loader) -> Dict['str', Union[float, np.array]]:
+        y_trues = []
+        Y_probs = []
+        y_probs_all = []
+        y_preds = []
+        indices_array = []
+        running_tloss = torch.zeros(1, device=self._device)
+        self._model_eval()
+        with torch.no_grad():
+            for b, batch in enumerate(inf_loader):
+                if self._debugging:
+                    if b + 1 == 2:
+                        break
+                X = batch['X'].to(self._device, non_blocking=True)
+                Y = batch['Y'].to(self._device, non_blocking=True)
+                # A = batch['A'].to(self._device, non_blocking=True)  # Transformer Model
+
+                with torch.cuda.amp.autocast(enabled=True):
+                    if self._model_type in ['CLF']:
+                        logits = self._model(X, A)
+                    else:
+                        logits = self._model(X)
+
+                tloss = self._loss_fct(logits, Y)
+                running_tloss += tloss
+
+                soft_out = F.softmax(logits, dim=-1)
+                soft_out_max = soft_out.max(-1)
+                probs = soft_out_max[0].detach().cpu().numpy()
+                probs_idx = soft_out_max[1].detach().cpu().numpy()
+                y_probs.extend(probs)
+                y_probs_all.extend(soft_out.detach().cpu().numpy())
+                y_preds.extend(probs_idx)
+                y_trues.extend(Y.detach().cpu().numpy())
+                indices_array.extend(batch['indices'].detach().cpu().numpy())
+
+        scores = {
+            'y_trues': np.array(y_trues),
+            'y_preds': np.array(y_preds),
+            'y_probs': np.array(y_probs),
+            'y_probs_all': np.array(y_probs_all),
+            'indices': np.array(indices_array)
+            'test_loss': (running_tloss / (b + 1)).detach().cpu().numpy()
+        }
+        return scores
 
 
     def _early_stopping(self, val_loss: torch.Tensor) -> bool:
