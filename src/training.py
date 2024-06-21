@@ -25,13 +25,18 @@ class Trainer:
     def __init__(
         self,
         model,
+        model_type: str,
         train_kwargs: Dict[str, Union[int, float, bool]],
         paths_dict: Dict[str, str],
+        debugging: bool = False,
         ddp_training: bool = False,
+        checkpoint: Dict[str, torch.Tensor] = None,
         device: str = None,
     )
     self._model = model
+    self._model_type = model_type
     self._paths_dict = paths_dict
+    self._debugging = debugging
     self._ddp_training = ddp_training
     self._device = device
 
@@ -40,11 +45,24 @@ class Trainer:
     self._scheduler = torch.optim.lr_scheduler.LinearLR(optimizer=self._optimizer, total_iters=5)
     self._scaler = torch.cuda.amp.GradScaler(enabled=True)
     self._loss_fct = torch.nn.CrossEntropyLoss()
+
+    self._epochs = train_kwargs['epochs']
+    self._epoch = 0
     
     # Initialize early stopping parameters
     self._best_val_loss = np.inf
     self._patience = train_kwargs['patience']
     self._patience_counter = 0
+
+    if checkpoint != None:
+        self._model.load_state_dict(checkpoint['model_state_dict'])
+        self._optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        self._scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        self._scaler.load_state_dict(checkpoint['scaler_state_dict'])
+
+        self._epoch = checkpoint['epoch']
+        self._best_val_loss = checkpoint['best_val_loss']
+        self._patience_counter = checkpoint['patience_counter']
 
     def training(self, train_loader, val_loader):
         for epoch in range(self.curr_epoch, self._epochs):
@@ -98,7 +116,6 @@ class Trainer:
 
                 train_loss = self._loss_fct(logits, Y)
             self._scaler.scale(train_loss).backward()
-
             self._scaler.step(self._optimizer)
             self._scaler.update()
             self._optimizer.zero_grad(set_to_none=True)
@@ -112,7 +129,6 @@ class Trainer:
                 if self._debugging:
                     if b + 1 == 2:
                         break
-
                 X = batch['X'].to(self._device, non_blocking=True)
                 Y = batch['Y'].to(self._device, non_blocking=True)
                 # A = batch['A'].to(self._device, non_blocking=True)  # Transformer Model
@@ -122,12 +138,12 @@ class Trainer:
                         logits = self._model(X, A)
                     else:
                         logits = self._model(X)
-                    
                     val_loss = torch.zeros(1, device=self._device)
                     val_loss = self._loss_fct(logits, Y)
                     losses[b] = val_loss.detach()
 
-        return torch.mean(losses) 
+        return torch.mean(losses)
+
 
 
     def _early_stopping(self, val_loss: torch.Tensor) -> bool:
@@ -143,16 +159,17 @@ class Trainer:
                 return True
         return False
 
-
-
-
-
-
-
-
-
-
-
-
-
+    def create_checkpoint(self, epoch: int) -> None:
+        torch.save(
+            {
+                'epoch': epoch + 1,
+                'model_state_dict': self._model.state_dict(),
+                'optimizer_state_dict': self._optimizer.state_dict(),
+                'scaler_state_dict': self._scaler.state_dict(),
+                'scheduler_state_dict': self._scheduler.state_dict(),
+                'best_val_loss': self._best_val_loss,
+                'patience_counter': self._patience_counter
+            },
+            self._paths_dict['checkpoint_path'])
+        )
 
