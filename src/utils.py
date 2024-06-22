@@ -2,12 +2,13 @@
 This file contains source code for the utility function used in this codebase.
     @author: Christoph S. Metzner
     @date: 06/17/2024
-    @last modified: 06/20/2024
+    @last modified: 06/22/2024
 """
 # Load libraries
 # built-in
 import os
 import sys
+import argparse
 from typing import Dict, Union, List
 
 # installed
@@ -68,4 +69,15 @@ def compute_performance_metrics(
     }
 
     return metrics
+
+
+def eval_bool_command(arg):
+    if isinstance(arg, bool):
+        return arg
+    if arg.lower() in ('yes', 'true', '1', 'y', 't'):
+        return True
+    elif arg.lower() in ('no', 'false', '0', 'n', 'f'):
+        return False
+    else:
+        argparse.ArgumentTypeError('Boolean Value Expected')
 
