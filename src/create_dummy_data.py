@@ -2,9 +2,10 @@
 This file contains source code to create a dummy dataset.
     @author: Christoph S. Metzner
     @date: 06/20/2024
-    @last modified: 06/20/2024
+    @last modified: 06/22/2024
 """
 import os
+import json
 from typing import Dict, Union, List
 import torch
 import pandas as pd
@@ -28,14 +29,20 @@ def create_dummy_dataset(
         Absolute path to storage location for dummy dataset.
 
     """
-    print('Hello')
+    if not os.path.exists(os.path.dirname(os.path.join(path_save_data, 'dummy_dataset/'))):
+        os.makedirs(os.path.dirname(os.path.join(path_save_data, 'dummy_dataset/')))
     splits = ['train', 'val', 'test']
     for split, n in zip(splits, N):
         X = torch.randint(0, 20000, (n, 3000)).tolist()
         Y = torch.randint(0, 3, (n, )).tolist()
 
         df = pd.DataFrame.from_dict({'X': X, 'Y': Y})
-        df.to_parquet(os.path.join(path_save_data, f'dummy_{split}.parquet'))
+        df.to_parquet(os.path.join(path_save_data, 'dummy_dataset', f'dummy_{split}.parquet'))
+
+    d = {'n_labels': 3}
+    with open(os.path.join(path_save_data, 'dummy_dataset', f'dummy_id2label.json'), 'w') as f:
+        json.dump(d, f)
+
+
 
 create_dummy_dataset(N=[1000, 1000, 1000], path_save_data='/Users/cmetzner/Desktop/coding_projects/pytorch_custom/data')
-print("Hello World!")
