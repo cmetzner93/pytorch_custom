@@ -2,7 +2,7 @@
 This file contains source code for the utility function used in this codebase.
     @author: Christoph S. Metzner
     @date: 06/17/2024
-    @last modified: 06/22/2024
+    @last modified: 06/23/2024
 """
 # Load libraries
 # built-in
