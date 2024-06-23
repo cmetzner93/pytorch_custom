@@ -275,8 +275,11 @@ class ModelSuite:
         trainer.training(train_loader=train_loader, val_loader=val_loader)
         end_time_training = time.time()
         print(f'Training time: {end_time_training - start_time_training}', flush=True)
-        # Here add delete checkpointing 
-
+        # Here add delete checkpointing
+        # Training complete - deleting last checkpoint
+        if os.path.exists(os.path.join(self._paths_dict['path_models'], f'{self._model_name}_checkpoint.tar')):
+            print('Training of model complete - deleting last training checkpoint!')
+            os.remove(os.path.join(self._paths_dict['path_models'], f'{self._model_name}_checkpoint.tar'))
     def infer_model(
         self,
         trainer,
