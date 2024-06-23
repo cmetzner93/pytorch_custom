@@ -2,7 +2,7 @@
 This file contains source code for various model architectures.
     @author:          Christoph S. Metzner
     @date created:    06/17/2024
-    @last modified:   06/22/2024
+    @last modified:   06/23/2024
 """
 
 # Load libraries
@@ -115,7 +115,6 @@ class CNN(nn.Module):
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
         """
         Forward pass of CNN object
-        
         Parameter
         ---------
         input_ids : torch.Tensor(dtype=torch.long)
@@ -125,24 +124,21 @@ class CNN(nn.Module):
         ------
         torch.Tensor
             Logits with shape [batch_size, num_classes]
-           
         """
-        
         # Truncates batch to length of longest sequence 
         mask_tokens = (input_ids != 0)
         tokens_per_sequence = mask_tokens.sum(-1)
         max_tokens = tokens_per_sequence.max()
         max_tokens = max(max_tokens, max(self.window_sizes))
-       
         mask_tokens = torch.unsqueeze(mask_tokens[:, :max_tokens], -1)
         input_ids_reduced = input_ids[:, :max_tokens]
 
         token_embeddings = self.embedding_layer(input_ids_reduced)
         token_embeddings = torch.mul(
             token_embeddings, 
-            mask.tokens.type(token_embeddings.dtype)
+            mask_tokens.type(token_embeddings.dtype)
         )
-        token_embeddings = token_embeds.permute(0, 2, 1)
+        token_embeddings = token_embeddings.permute(0, 2, 1)
 
         conv_outs = []
         for layer in self.conv_layers:
@@ -151,10 +147,10 @@ class CNN(nn.Module):
         H = torch.cat(conv_outs, 1)
         H = self.dropout_layer(H)
 
-        if self.logits_mechanism == 'baseline':
+        if self.logits_mechanism == 'max-pooling':
             logits = self.output_layer(H.permute(0, 2, 1)).permute(0, 2, 1)
             logits = F.adaptive_max_pool1d(logits, 1)
             logits = torch.flatten(logits, start_dim=1)
 
-        return logits 
-         
+        return logits
+
