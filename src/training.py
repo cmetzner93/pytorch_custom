@@ -145,7 +145,6 @@ class Trainer:
                 X = batch['X'].to(self._device, non_blocking=True)
                 Y = batch['Y'].to(self._device, non_blocking=True)
                 # A = batch['A'].to(self._device, non_blocking=True)  # Transformer Model
-
                 with torch.cuda.amp.autocast(enabled=self._mixed_precision):
                     if self._model_type in ['CLF']:
                         logits = self._model(X, A)
@@ -167,13 +166,15 @@ class Trainer:
         self._model.eval()
         with torch.no_grad():
             for b, batch in enumerate(inf_loader):
+                print(b)
                 if self._debugging:
                     if b + 1 == 2:
                         break
                 X = batch['X'].to(self._device, non_blocking=True)
                 Y = batch['Y'].to(self._device, non_blocking=True)
                 # A = batch['A'].to(self._device, non_blocking=True)  # Transformer Model
-
+                print(X)
+                print(Y)
                 with torch.cuda.amp.autocast(enabled=self._mixed_precision):
                     if self._model_type in ['CLF']:
                         logits = self._model(X, A)
@@ -192,6 +193,8 @@ class Trainer:
                 y_preds.extend(probs_idx)
                 y_trues.extend(Y.detach().cpu().numpy())
                 indices_array.extend(batch['idx'].detach().cpu().numpy())
+                print(y_preds)
+                print(y_trues)
 
         scores = {
             'y_trues': np.array(y_trues),

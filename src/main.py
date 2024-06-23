@@ -219,7 +219,7 @@ class ModelSuite:
 
         return model
 
-    def init_trainer(self, model, train_kwargs: Dict, debugging: bool):
+    def init_trainer(self, model, train_kwargs: Dict, debugging: bool, eval_model: bool):
         model.to(self._device)
 
         # This is where you need to add DDP functionality
@@ -280,6 +280,7 @@ class ModelSuite:
         if os.path.exists(os.path.join(self._paths_dict['path_models'], f'{self._model_name}_checkpoint.tar')):
             print('Training of model complete - deleting last training checkpoint!')
             os.remove(os.path.join(self._paths_dict['path_models'], f'{self._model_name}_checkpoint.tar'))
+
     def infer_model(
         self,
         trainer,
@@ -422,6 +423,7 @@ def main():
             train_kwargs=model_config['train_kwargs']
         )
 
+
         scores = model_suite.infer_model(
             trainer=trainer,
             train_kwargs=model_config['train_kwargs'],
@@ -439,16 +441,56 @@ def main():
             else:
                 print(f'Metric {metric}: {score}', flush=True)
 
-    else:
-        # only train a model
-        z = 0
     if args.eval_model:
-        # Evaluate a pretrained model on any dataset
-        z = 0
-    return 0
+        if args.path_trained_model is None:
+            raise ValueError("Provide absolute path to trained model\
+                             utilize args.path_trained_model!")
+        # Get model name from provided path
+        model_name = args.path_trained_model.split('/')[-1].split('.')[0]
+        print(model_name)
+        print(args.path_trained_model.split('/'))
+        # Retrieve model_config of trained model using path of path_trained_model
+        with open(os.path.join('/'.join(args.path_trained_model.split('/')[:-1]), f'models_config_{model_name}.json'), 'r') as f:
+            model_config = json.load(f)
 
+        model_suite._experiment_name = model_config['model_suite']['experiment_name']
+        model_suite._model_description = model_config['model_suite']['model_description']
+        model_suite._dataset = model_config['model_suite']['dataset']
+        model_suite._model_type = model_config['model_suite']['model_type']
+        model_suite._seed = model_config['model_suite']['seed']
+        model_suite._time_model_init = model_config['model_suite']['time_model_init']
+        model_suite._model_name = model_config['model_suite']['model_name']
 
+        model = model_suite.init_model(model_kwargs=model_config['model_kwargs'][model_suite._model_type])
+        model.load_state_dict(torch.load(os.path.join(paths_dict['path_models'], f'{model_name}.pt'), map_location=torch.device(device)))
+        model.to(device)
 
+        trainer = model_suite.init_trainer(
+            model = model,
+            train_kwargs = model_config['train_kwargs'],
+            debugging = args.debugging,
+            eval_model = args.eval_model
+        )
+
+        data = model_suite.fetch_data(dataset=args.dataset, doc_max_len=model_config['train_kwargs']['doc_max_len'])
+
+        scores = model_suite.infer_model(
+            trainer=trainer,
+            train_kwargs=model_config['train_kwargs'],
+            inference_data=data['test'] #args.inference_data]
+        )
+
+        metrics = compute_performance_metrics(
+            y_trues = scores['y_trues'],
+            y_preds = scores['y_preds'],
+            num_classes = model_config['model_kwargs'][args.model_type]['num_classes']
+        )
+
+        for metric, score in metrics.items():
+            if metric != 'f1_ind':
+                print(f'Metric {metric}: {score:.3f}', flush=True)
+            else:
+                print(f'Metric {metric}: {score}', flush=True)
 
 
 if __name__ == "__main__":

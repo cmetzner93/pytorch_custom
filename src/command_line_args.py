@@ -136,6 +136,11 @@ def create_args_parser():
         help='Flag indicating how final context-vector / logits are computed'
     )
 
-
+    parser.add_argument(
+        '--path_trained_model',
+        type=str,
+        help='Path to trained model - make sure that its model_config file \
+              is in the same directory'
+    )
     return parser
 
