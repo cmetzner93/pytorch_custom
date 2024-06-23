@@ -2,7 +2,7 @@
 This file contains the model suite training class object allowing full control over loading, training, and infering a specific model.
     @author:         Christoph S. Metzner
     @date:           06/17/2024
-    @last modified:  06/22/2024
+    @last modified:  06/23/2024
 """
 
 
@@ -16,6 +16,8 @@ import yaml
 from typing import Dict, List, Union
 from datetime import datetime
 import time
+import warnings
+warnings.filterwarnings('ignore')
 
 # installed
 import torch
@@ -28,7 +30,7 @@ from models import CNN
 from command_line_args import create_args_parser
 from training import Trainer 
 from dataloaders import GenericDataloader
-
+from utils import compute_performance_metrics 
 
 # Set path to root project
 try:
@@ -229,6 +231,7 @@ class ModelSuite:
         trainer = Trainer(
             model = model,
             model_type = self._model_type,
+            model_name = self._model_name,
             train_kwargs = train_kwargs,
             paths_dict = self._paths_dict,
             debugging = debugging,
@@ -271,7 +274,7 @@ class ModelSuite:
         start_time_training = time.time()
         trainer.training(train_loader=train_loader, val_loader=val_loader)
         end_time_training = time.time()
-
+        print(f'Training time: {end_time_training - start_time_training}', flush=True)
         # Here add delete checkpointing 
 
     def infer_model(
@@ -280,7 +283,24 @@ class ModelSuite:
         train_kwargs,
         inference_data
     ):
-        return metrics
+        dataloader = GenericDataloader
+
+        inference_dataset = dataloader(X=inference_data['X'], Y=inference_data['Y'])
+
+        inference_loader = DataLoader(
+            dataset = inference_dataset,
+            batch_size = train_kwargs['batch_size'],
+            num_workers=2,
+            pin_memory=True,
+            prefetch_factor=2,
+            shuffle=False
+        )
+
+        start_time_inferring = time.time()
+        scores = trainer._predict(inf_loader=inference_loader)
+        end_time_inferring = time.time()
+        print(f'Inference time: {end_time_inferring - start_time_inferring}', flush=True)
+        return scores
 
     def store_scores(
         self,
@@ -399,14 +419,23 @@ def main():
             train_kwargs=model_config['train_kwargs']
         )
 
-        model_suite.predict(
+        scores = model_suite.infer_model(
             trainer=trainer,
-            train_kwargs=train_kwargs,
+            train_kwargs=model_config['train_kwargs'],
             inference_data=data[args.inference_data]
         )
 
-        # train a model and then evaluate
-        z = 0
+        metrics = compute_performance_metrics(
+            y_trues = scores['y_trues'],
+            y_preds = scores['y_preds'],
+            num_classes = model_config['model_kwargs'][args.model_type]['num_classes']
+        )
+        for metric, score in metrics.items():
+            if metric != 'f1_ind':
+                print(f'Metric {metric}: {score:.3f}', flush=True)
+            else:
+                print(f'Metric {metric}: {score}', flush=True)
+
     else:
         # only train a model
         z = 0
