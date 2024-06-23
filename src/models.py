@@ -2,7 +2,7 @@
 This file contains source code for various model architectures.
     @author:          Christoph S. Metzner
     @date created:    06/17/2024
-    @last modified:   06/17/2024
+    @last modified:   06/22/2024
 """
 
 # Load libraries
@@ -10,6 +10,8 @@ This file contains source code for various model architectures.
 from typing import List, Union
 
 # installed
+import numpy as np
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -51,17 +53,17 @@ class CNN(nn.Module):
         window_sizes: List[int],
         dropout_prob: float,
         logits_mechanism: str,
-        device: str
+        device: str,
         word_embedding_dim: int,
         word_embedding_matrix: np.array = None,
         vocab_size: int = None
     ) -> None:
-
+        super().__init__()
         self.num_classes = num_classes
         self.window_sizes = window_sizes
-        if is_instance(hidden_size, int):
+        if isinstance(hidden_size, int):
             self.hidden_sizes = [hidden_size] * len(window_sizes)
-        elif is_instance(hidden_size, list):
+        elif isinstance(hidden_size, list):
             self.hidden_sizes = hidden_size
         self.dropout_prob = dropout_prob
         self.logits_mechanism = logits_mechanism
@@ -69,22 +71,22 @@ class CNN(nn.Module):
         self.word_embedding_dim = word_embedding_dim
 
         assert len(self.hidden_sizes) == len(self.window_sizes) 
- 
-        if word_embedding_matrix is None:
-            self.embedding_layer = nn.Embedding(
-                num_embedding=vocab_size,
+ #
+        #if word_embedding_matrix is None:
+        self.embedding_layer = nn.Embedding(
+                num_embeddings=vocab_size,
                 embedding_dim=word_embedding_dim,
                 padding_idx=0
-            )
-        else:
-            word_embedding_matrix -= word_embedding_matrix.mean(axis=0)
-            word_embedding_matrix /= word_embedding_matrix.std()
-            word_embedding_matrix[0] = 0.0  # padding token
-            self.embedding_layer = nn.Embedding.from_pretrained(
-                torch.tensor(word_embedding_matrix, dtype=torch.float),
-                freeze=False,
-                padding_idx=0
-            )
+        )
+        #else:
+        #    word_embedding_matrix -= word_embedding_matrix.mean(axis=0)
+        #    word_embedding_matrix /= word_embedding_matrix.std()
+        #    word_embedding_matrix[0] = 0.0  # padding token
+        #    self.embedding_layer = nn.Embedding.from_pretrained(
+        #        torch.tensor(word_embedding_matrix, dtype=torch.float),
+        #        freeze=False,
+        #        padding_idx=0
+        #    )
 
         # Initialize dropout layer applied to convolution output
         self.dropout_layer = nn.Dropout(p=self.dropout_prob)
@@ -100,15 +102,15 @@ class CNN(nn.Module):
                 kernel_size=window_size
             )
             nn.init.xavier_uniform_(conv_layer.weight)
-            nn.init.xavier_uniform_(conv_layer.bias)
+            torch.nn.init.zeros_(conv_layer.bias)
             self.conv_layers.append(conv_layer)
 
         self.output_layer = nn.Linear(
-            in_features=torch.sum(self.hidden_sizes),
+            in_features=np.sum(self.hidden_sizes),
             out_features=self.num_classes
         )
         nn.init.xavier_uniform_(self.output_layer.weight)
-        nn.init.xavier_uniform_(self.output_layer.bias)
+        torch.nn.init.zeros_(self.output_layer.bias)
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
         """

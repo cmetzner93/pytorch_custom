@@ -11,7 +11,8 @@ import torch
 import pandas as pd
 def create_dummy_dataset(
     N: Union[int, List[int]],
-    path_save_data: str
+    path_save_data: str,
+    vocab_size: int = 20000
     ) -> None:
     """
     This function creates a dummy dataset containing samples as integer-index
@@ -33,13 +34,13 @@ def create_dummy_dataset(
         os.makedirs(os.path.dirname(os.path.join(path_save_data, 'dummy_dataset/')))
     splits = ['train', 'val', 'test']
     for split, n in zip(splits, N):
-        X = torch.randint(0, 20000, (n, 3000)).tolist()
+        X = torch.randint(0, vocab_size + 1, (n, 3000)).tolist()  # 0 [inclusive] to vocab_size [exclusive]
         Y = torch.randint(0, 3, (n, )).tolist()
 
         df = pd.DataFrame.from_dict({'X': X, 'Y': Y})
         df.to_parquet(os.path.join(path_save_data, 'dummy_dataset', f'dummy_{split}.parquet'))
 
-    d = {'n_labels': 3}
+    d = {'num_labels': 3, 'vocab_size': vocab_size}
     with open(os.path.join(path_save_data, 'dummy_dataset', f'dummy_id2label.json'), 'w') as f:
         json.dump(d, f)
 

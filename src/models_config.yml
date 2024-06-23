@@ -1,0 +1,20 @@
+train_kwargs:
+  doc_max_len: 3000
+  batch_size: 16
+  epochs: 100
+  patience: 5
+  learning_rate: 0.0001
+  frequent_validation: False
+  n_steps: 1500
+  return_attention_scores: False
+model_kwargs:
+  CNN:
+    num_classes: ~
+    hidden_size: 300
+    window_sizes: [3, 4, 5]
+    dropout_prob: 0.1
+    logits_mechanism: 'max-pooling'
+    word_embedding_dim: 100
+    word_embedding_matrix: null
+    vocab_size: ~ 
+

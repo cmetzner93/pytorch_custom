@@ -2,9 +2,10 @@
 This file contains source code for multiple dataloaders utilized
     @author: Christoph S. Metzner
     @date: 06/18/2024
-    @last modified: 06/18/2024
+    @last modified: 06/22/2024
 """
-
+# built-in
+from typing import Dict
 # Installed libraries
 import torch
 from torch.utils.data import Dataset
