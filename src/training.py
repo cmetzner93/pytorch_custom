@@ -107,6 +107,9 @@ class Trainer:
             if early_stopping:
                 break
 
+            if epoch + 1 % 1 == 0:
+                self._create_checkpoint(epoch=epoch+1)
+
     def _train_one_epoch(self, train_loader) -> torch.Tensor:
         for b, batch in enumerate(train_loader):
             print(f'Current batch: {b}', flush=True)
@@ -214,7 +217,7 @@ class Trainer:
                 return True
         return False
 
-    def create_checkpoint(self, epoch: int) -> None:
+    def _create_checkpoint(self, epoch: int) -> None:
         torch.save(
             {
                 'epoch': epoch + 1,
