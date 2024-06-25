@@ -3,7 +3,7 @@ This file contains source code for the Trainer class to control the training
 procedure of a machine learning model implemented in pytorch.
     @author: Christoph S. Metzner
     @date created:  06/18/2024
-    @last modified: 06/23/2024
+    @last modified: 06/24/2024
 """
 
 # Load libraries
@@ -107,8 +107,8 @@ class Trainer:
             if early_stopping:
                 break
 
-            if epoch + 1 % 1 == 0:
-                self._create_checkpoint(epoch=epoch+1)
+            if epoch  % 1 == 0:
+                self._create_checkpoint(epoch=epoch)
 
     def _train_one_epoch(self, train_loader) -> torch.Tensor:
         for b, batch in enumerate(train_loader):

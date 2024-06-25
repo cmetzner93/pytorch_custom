@@ -2,7 +2,7 @@
 This file contains the model suite training class object allowing full control over loading, training, and infering a specific model.
     @author:         Christoph S. Metzner
     @date:           06/17/2024
-    @last modified:  06/23/2024
+    @last modified:  06/24/2024
 """
 
 
@@ -219,14 +219,15 @@ class ModelSuite:
 
         return model
 
-    def init_trainer(self, model, train_kwargs: Dict, debugging: bool, eval_model: bool):
+    def init_trainer(
+        self,
+        model,
+        train_kwargs: Dict,
+        debugging: bool = False,
+        checkpoint: Dict = None,
+        eval_model: bool = False
+    ):
         model.to(self._device)
-
-        # This is where you need to add DDP functionality
-
-        checkpoint = None
-        # Need to add the checkpoint here
-
 
         trainer = Trainer(
             model = model,
@@ -315,10 +316,6 @@ class ModelSuite:
         return 0
 
 
-
-
-
-
 def main():
     # Setup command line arguments
     parser = create_args_parser()
@@ -389,23 +386,50 @@ def main():
         'logits_mechanism': args.logits_mechanism,
     }
 
+    from_checkpoint = None
+    if args.from_checkpoint is not None:
+        from_checkpoint = args.from_checkpoint
 
     # Train model
-    if args.train_eval_model:
-        # Fit model configuration file
-        model_config = model_suite.fit_model_config(command_line_args)
-        model_name = '_'.join([str(value) for value in model_config['model_suite'].values()])
-        print(f'The name of your model is: {model_name}', flush=True)
+    if args.train_eval_model and not args.eval_model:
+        print('ModelSuite set in mode: train and evaluate model', flush=True)
+        if from_checkpoint is not None:
+            model_checkpoint = from_checkpoint.split('/')[-1].split('.')[0]
+            model_name = model_checkpoint.split('_checkpoint')[0]
 
-        model_config['model_suite']['model_name'] = model_name
-        model_suite._model_name = model_name
+            # Retrieve model_config of trained model using path of path_trained_model
+            with open(os.path.join('/'.join(from_checkpoint.split('/')[:-1]), f'models_config_{model_name}.json'), 'r') as f:
+                model_config = json.load(f)
 
-        model = model_suite.init_model(model_kwargs=model_config['model_kwargs'][args.model_type])
+
+            model_suite._experiment_name = model_config['model_suite']['experiment_name']
+            model_suite._model_description = model_config['model_suite']['model_description']
+            model_suite._dataset = model_config['model_suite']['dataset']
+            model_suite._model_type = model_config['model_suite']['model_type']
+            model_suite._seed = model_config['model_suite']['seed']
+            model_suite._time_model_init = model_config['model_suite']['time_model_init']
+            model_suite._model_name = model_config['model_suite']['model_name']
+
+            model = model_suite.init_model(model_kwargs=model_config['model_kwargs'][model_suite._model_type])
+            checkpoint = torch.load(from_checkpoint, map_location=torch.device(device)) 
+
+        else:
+            checkpoint = None
+            # Fit model configuration file
+            model_config = model_suite.fit_model_config(command_line_args)
+            model_name = '_'.join([str(value) for value in model_config['model_suite'].values()])
+            print(f'The name of your model is: {model_name}', flush=True)
+
+            model_config['model_suite']['model_name'] = model_name
+            model_suite._model_name = model_name
+
+            model = model_suite.init_model(model_kwargs=model_config['model_kwargs'][args.model_type])
 
         trainer = model_suite.init_trainer(
             model = model,
             train_kwargs = model_config['train_kwargs'],
-            debugging = args.debugging
+            checkpoint=checkpoint,
+            debugging = args.debugging,
         )
 
         # Save model_config file specific to your current new model
@@ -423,7 +447,6 @@ def main():
             train_kwargs=model_config['train_kwargs']
         )
 
-
         scores = model_suite.infer_model(
             trainer=trainer,
             train_kwargs=model_config['train_kwargs'],
@@ -440,15 +463,68 @@ def main():
                 print(f'Metric {metric}: {score:.3f}', flush=True)
             else:
                 print(f'Metric {metric}: {score}', flush=True)
+    elif not args.train_eval_model and not args.eval_model:
+        print('ModelSuite set in mode: train model only', flush=True)
+        if from_checkpoint is not None:
+            model_checkpoint = from_checkpoint.split('/')[-1].split('.')[0]
+            model_name = model_checkpoint.split('_checkpoint')[0]
 
-    if args.eval_model:
+            # Retrieve model_config of trained model using path of path_trained_model
+            with open(os.path.join('/'.join(from_checkpoint.split('/')[:-1]), f'models_config_{model_name}.json'), 'r') as f:
+                model_config = json.load(f)
+
+
+            model_suite._experiment_name = model_config['model_suite']['experiment_name']
+            model_suite._model_description = model_config['model_suite']['model_description']
+            model_suite._dataset = model_config['model_suite']['dataset']
+            model_suite._model_type = model_config['model_suite']['model_type']
+            model_suite._seed = model_config['model_suite']['seed']
+            model_suite._time_model_init = model_config['model_suite']['time_model_init']
+            model_suite._model_name = model_config['model_suite']['model_name']
+
+            model = model_suite.init_model(model_kwargs=model_config['model_kwargs'][model_suite._model_type])
+            checkpoint = torch.load(from_checkpoint, map_location=torch.device(device)) 
+
+        else:
+            checkpoint = None
+            # Fit model configuration file
+            model_config = model_suite.fit_model_config(command_line_args)
+            model_name = '_'.join([str(value) for value in model_config['model_suite'].values()])
+            print(f'The name of your model is: {model_name}', flush=True)
+
+            model_config['model_suite']['model_name'] = model_name
+            model_suite._model_name = model_name
+
+            model = model_suite.init_model(model_kwargs=model_config['model_kwargs'][args.model_type])
+
+        trainer = model_suite.init_trainer(
+            model = model,
+            train_kwargs = model_config['train_kwargs'],
+            checkpoint=checkpoint,
+            debugging = args.debugging,
+        )
+
+        # Save model_config file specific to your current new model
+        print(f'models_config_{model_name}.json', flush=True)
+        with open(os.path.join(model_suite._paths_dict['path_models'], f'models_config_{model_name}.json'), 'w') as f:
+            json.dump(model_config, f)
+
+        # Fetch data
+        data = model_suite.fetch_data(dataset=args.dataset, doc_max_len=model_config['train_kwargs']['doc_max_len'])
+
+        model_suite.train_model(
+            trainer=trainer,
+            train_data=data['train'],
+            val_data=data['val'],
+            train_kwargs=model_config['train_kwargs']
+        )
+
+    if args.eval_model and not args.train_eval_model:
         if args.path_trained_model is None:
             raise ValueError("Provide absolute path to trained model\
                              utilize args.path_trained_model!")
         # Get model name from provided path
         model_name = args.path_trained_model.split('/')[-1].split('.')[0]
-        print(model_name)
-        print(args.path_trained_model.split('/'))
         # Retrieve model_config of trained model using path of path_trained_model
         with open(os.path.join('/'.join(args.path_trained_model.split('/')[:-1]), f'models_config_{model_name}.json'), 'r') as f:
             model_config = json.load(f)
