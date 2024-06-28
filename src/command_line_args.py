@@ -3,7 +3,7 @@ This file contains source code handling the command line arguments controlling
 the usage of the ModelSuite class.
     @author: Christoph S. Metzner
     @date created:  06/22/2024
-    @last modified: 06/24/2024
+    @last modified: 06/28/2024
 """
 
 # Import libraries
@@ -48,8 +48,8 @@ def create_args_parser():
 
     # These command line args control model training/evaluation flow
     parser.add_argument(
-        '-tem',
-        '--train_eval_model',
+        '-tm',
+        '--train_model',
         type=eval_bool_command,
         required=True
     )
