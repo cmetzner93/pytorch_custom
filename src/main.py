@@ -67,7 +67,7 @@ class ModelSuite:
         self._time_model_init = datetime.now().strftime('%Y%m%d%H%M%S')
 
 
-    def fetch_data(self, dataset: str, doc_max_len: int, splits: List[str] = ['train', 'val', 'test']):
+    def _fetch_data(self, dataset: str, doc_max_len: int, splits: List[str] = ['train', 'val', 'test']):
         
         """
         Method that fetches the specified dataset.
@@ -166,7 +166,7 @@ class ModelSuite:
             data[split]['Y'] = y
         return data
 
-    def fit_model_config(self, config_args: Dict[str, Union[str, bool, float]]):
+    def _fit_model_config(self, config_args: Dict[str, Union[str, bool, float]]):
         with open(os.path.join(os.getcwd(), 'models_config.yml'), 'r') as f:
             model_config = yaml.safe_load(stream=f)
 
@@ -211,7 +211,7 @@ class ModelSuite:
         model_config['model_suite']['time_model_init'] = self._time_model_init
         return model_config
 
-    def init_model(self, model_kwargs: Dict):
+    def _init_model(self, model_kwargs: Dict):
         if self._model_type == 'CNN':
             model = CNN(**model_kwargs, device=self._device)
         else:
@@ -219,13 +219,12 @@ class ModelSuite:
 
         return model
 
-    def init_trainer(
+    def _init_trainer(
         self,
         model,
         train_kwargs: Dict,
         debugging: bool = False,
         checkpoint: Dict = None,
-        eval_model: bool = False
     ):
         model.to(self._device)
 
@@ -242,7 +241,7 @@ class ModelSuite:
         )
         return trainer
 
-    def train_model(
+    def _train_model(
         self,
         trainer,
         train_kwargs,
@@ -282,7 +281,7 @@ class ModelSuite:
             print('Training of model complete - deleting last training checkpoint!')
             os.remove(os.path.join(self._paths_dict['path_models'], f'{self._model_name}_checkpoint.tar'))
 
-    def infer_model(
+    def _eval_model(
         self,
         trainer,
         train_kwargs,
@@ -315,9 +314,136 @@ class ModelSuite:
     ):
         return 0
 
-    
+    def _update_model_suite_attributes(self, model_config: Dict):
+        self._experiment_name = model_config['model_suite']['experiment_name']
+        self._model_description = model_config['model_suite']['model_description']
+        self._dataset = model_config['model_suite']['dataset']
+        self._model_type = model_config['model_suite']['model_type']
+        self._seed = model_config['model_suite']['seed']
+        self._time_model_init = model_config['model_suite']['time_model_init']
+        self._model_name = model_config['model_suite']['model_name']
 
 
+    def eval_model(self, path_trained_model, debugging, inference_data):
+        # Get model name from provided path
+        model_name = path_trained_model.split('/')[-1].split('.')[0]
+        # Retrieve model_config of trained model using path of path_trained_model
+        with open(os.path.join('/'.join(path_trained_model.split('/')[:-1]), f'models_config_{model_name}.json'), 'r') as f:
+            model_config = json.load(f)
+
+        self._update_model_suite_attributes(model_config)
+
+        model = self._init_model(model_kwargs=model_config['model_kwargs'][self._model_type])
+        model.load_state_dict(torch.load(os.path.join(self._paths_dict['path_models'], f'{model_name}.pt'), map_location=torch.device(self._device)))
+        model.to(self._device)
+
+        trainer = self._init_trainer(
+            model = model,
+            train_kwargs = model_config['train_kwargs'],
+            debugging = debugging,
+        )
+
+        data = self._fetch_data(dataset=self._dataset, doc_max_len=model_config['train_kwargs']['doc_max_len'])
+
+        scores = self._eval_model(
+            trainer=trainer,
+            train_kwargs=model_config['train_kwargs'],
+            inference_data=data[inference_data] #args.inference_data]
+        )
+
+
+        metrics = compute_performance_metrics(
+            y_trues = scores['y_trues'],
+            y_preds = scores['y_preds'],
+            num_classes = model_config['model_kwargs'][self._model_type]['num_classes']
+        )
+
+        for metric, score in metrics.items():
+            if metric != 'f1_ind':
+                print(f'Metric {metric}: {score:.3f}', flush=True)
+            else:
+                print(f'Metric {metric}: {score}', flush=True)
+        return scores, metrics
+
+    def train_model(
+        self,
+        from_checkpoint: str,
+        command_line_args: Dict,
+        debugging: bool,
+        inference_data: str,
+        eval_model: bool
+    ):
+        if from_checkpoint is None:
+
+            checkpoint = None
+            # Fit model configuration file
+            model_config = self._fit_model_config(command_line_args)
+            model_name = '_'.join([str(value) for value in model_config['model_suite'].values()])
+            print(f'The name of your model is: {model_name}', flush=True)
+
+            model_config['model_suite']['model_name'] = model_name
+            self._model_name = model_name
+            # Save model_config file specific to your current new model
+            print(f'models_config_{model_name}.json', flush=True)
+            with open(os.path.join(self._paths_dict['path_models'], f'models_config_{model_name}.json'), 'w') as f:
+                json.dump(model_config, f)
+
+            model = self._init_model(model_kwargs=model_config['model_kwargs'][self._model_type])
+
+        else:
+            model_checkpoint = from_checkpoint.split('/')[-1].split('.')[0]
+            model_name = model_checkpoint.split('_checkpoint')[0]
+
+            # Retrieve model_config of trained model using path of path_trained_model
+            with open(os.path.join('/'.join(from_checkpoint.split('/')[:-1]), f'models_config_{model_name}.json'), 'r') as f:
+                model_config = json.load(f)
+
+            self._update_model_suite_attributes(model_config)
+
+            model = self._init_model(model_kwargs=model_config['model_kwargs'][self._model_type])
+            checkpoint = torch.load(from_checkpoint, map_location=torch.device(self._device)) 
+
+        trainer = self._init_trainer(
+            model = model,
+            train_kwargs = model_config['train_kwargs'],
+            checkpoint=checkpoint,
+            debugging=debugging,
+        )
+
+        # Fetch data
+        data = self._fetch_data(dataset=self._dataset, doc_max_len=model_config['train_kwargs']['doc_max_len'])
+
+        self._train_model(
+            trainer=trainer,
+            train_data=data['train'],
+            val_data=data['val'],
+            train_kwargs=model_config['train_kwargs']
+        )
+
+        if eval_model:
+            # Load best performing model  
+            model.load_state_dict(torch.load(os.path.join(self._paths_dict['path_models'], f'{self._model_name}.pt'), map_location=torch.device(self._device)))
+            model.to(self._device)
+            trainer._model = model
+
+            scores = self._eval_model(
+                trainer=trainer,
+                train_kwargs=model_config['train_kwargs'],
+                inference_data=data[inference_data]
+            )
+
+            metrics = compute_performance_metrics(
+                y_trues = scores['y_trues'],
+                y_preds = scores['y_preds'],
+                num_classes = model_config['model_kwargs'][self._model_type]['num_classes']
+            )
+            for metric, score in metrics.items():
+                if metric != 'f1_ind':
+                    print(f'Metric {metric}: {score:.3f}', flush=True)
+                else:
+                    print(f'Metric {metric}: {score}', flush=True)
+            return scores, metrics
+        return 0, 0
 
 def main():
     # Setup command line arguments
@@ -392,140 +518,24 @@ def main():
     if args.from_checkpoint is not None:
         from_checkpoint = args.from_checkpoint
 
-
-    # if args.train_model:
-    # 
-    #    if args.also_eval_model:
-    #    perform evaluation as well
-    # else:
-    # if train_model is false assume that prexisting model is available which needs to be evaluated
-    #
-    #
     if args.train_model:
-        # Step 1: Configurate a model_config dict for a new model
-        if from_checkpoint is None:
-
-            checkpoint = None
-            # Fit model configuration file
-            model_config = model_suite.fit_model_config(command_line_args)
-            model_name = '_'.join([str(value) for value in model_config['model_suite'].values()])
-            print(f'The name of your model is: {model_name}', flush=True)
-
-            model_config['model_suite']['model_name'] = model_name
-            model_suite._model_name = model_name
-            # Save model_config file specific to your current new model
-            print(f'models_config_{model_name}.json', flush=True)
-            with open(os.path.join(model_suite._paths_dict['path_models'], f'models_config_{model_name}.json'), 'w') as f:
-                json.dump(model_config, f)
-
-            model = model_suite.init_model(model_kwargs=model_config['model_kwargs'][args.model_type])
-
-        else:
-            model_checkpoint = from_checkpoint.split('/')[-1].split('.')[0]
-            model_name = model_checkpoint.split('_checkpoint')[0]
-
-            # Retrieve model_config of trained model using path of path_trained_model
-            with open(os.path.join('/'.join(from_checkpoint.split('/')[:-1]), f'models_config_{model_name}.json'), 'r') as f:
-                model_config = json.load(f)
-
-
-            model_suite._experiment_name = model_config['model_suite']['experiment_name']
-            model_suite._model_description = model_config['model_suite']['model_description']
-            model_suite._dataset = model_config['model_suite']['dataset']
-            model_suite._model_type = model_config['model_suite']['model_type']
-            model_suite._seed = model_config['model_suite']['seed']
-            model_suite._time_model_init = model_config['model_suite']['time_model_init']
-            model_suite._model_name = model_config['model_suite']['model_name']
-
-            model = model_suite.init_model(model_kwargs=model_config['model_kwargs'][model_suite._model_type])
-            checkpoint = torch.load(from_checkpoint, map_location=torch.device(device)) 
-
-        trainer = model_suite.init_trainer(
-            model = model,
-            train_kwargs = model_config['train_kwargs'],
-            checkpoint=checkpoint,
-            debugging = args.debugging,
+        scores, metrics = model_suite.train_model(
+            from_checkpoint=from_checkpoint,
+            command_line_args=command_line_args,
+            debugging=args.debugging,
+            inference_data=args.inference_data,
+            eval_model=args.eval_model
         )
-
-        # Fetch data
-        data = model_suite.fetch_data(dataset=args.dataset, doc_max_len=model_config['train_kwargs']['doc_max_len'])
-
-        model_suite.train_model(
-            trainer=trainer,
-            train_data=data['train'],
-            val_data=data['val'],
-            train_kwargs=model_config['train_kwargs']
-        )
-
-        if args.eval_model:
-            # Load best performing model  
-            model.load_state_dict(torch.load(os.path.join(model_suite._paths_dict['path_models'], f'{model_suite._model_name}.pt'), map_location=torch.device(device)))
-            model.to(device)
-            trainer._model = model
-            scores = model_suite.infer_model(
-                trainer=trainer,
-                train_kwargs=model_config['train_kwargs'],
-                inference_data=data[args.inference_data]
-            )
-
-            metrics = compute_performance_metrics(
-                y_trues = scores['y_trues'],
-                y_preds = scores['y_preds'],
-                num_classes = model_config['model_kwargs'][args.model_type]['num_classes']
-            )
-            for metric, score in metrics.items():
-                if metric != 'f1_ind':
-                    print(f'Metric {metric}: {score:.3f}', flush=True)
-                else:
-                    print(f'Metric {metric}: {score}', flush=True)
     else:
         if args.path_trained_model is None:
             raise ValueError("Provide absolute path to trained model\
                              utilize args.path_trained_model!")
-        # Get model name from provided path
-        model_name = args.path_trained_model.split('/')[-1].split('.')[0]
-        # Retrieve model_config of trained model using path of path_trained_model
-        with open(os.path.join('/'.join(args.path_trained_model.split('/')[:-1]), f'models_config_{model_name}.json'), 'r') as f:
-            model_config = json.load(f)
 
-        model_suite._experiment_name = model_config['model_suite']['experiment_name']
-        model_suite._model_description = model_config['model_suite']['model_description']
-        model_suite._dataset = model_config['model_suite']['dataset']
-        model_suite._model_type = model_config['model_suite']['model_type']
-        model_suite._seed = model_config['model_suite']['seed']
-        model_suite._time_model_init = model_config['model_suite']['time_model_init']
-        model_suite._model_name = model_config['model_suite']['model_name']
-
-        model = model_suite.init_model(model_kwargs=model_config['model_kwargs'][model_suite._model_type])
-        model.load_state_dict(torch.load(os.path.join(paths_dict['path_models'], f'{model_name}.pt'), map_location=torch.device(device)))
-        model.to(device)
-
-        trainer = model_suite.init_trainer(
-            model = model,
-            train_kwargs = model_config['train_kwargs'],
-            debugging = args.debugging,
-            eval_model = args.eval_model
+        scores, metrics = model_suite.eval_model(
+            path_trained_model=args.path_trained_model,
+            debugging=args.debugging,
+            inference_data=args.inference_data
         )
-
-        data = model_suite.fetch_data(dataset=args.dataset, doc_max_len=model_config['train_kwargs']['doc_max_len'])
-
-        scores = model_suite.infer_model(
-            trainer=trainer,
-            train_kwargs=model_config['train_kwargs'],
-            inference_data=data['test'] #args.inference_data]
-        )
-
-        metrics = compute_performance_metrics(
-            y_trues = scores['y_trues'],
-            y_preds = scores['y_preds'],
-            num_classes = model_config['model_kwargs'][args.model_type]['num_classes']
-        )
-
-        for metric, score in metrics.items():
-            if metric != 'f1_ind':
-                print(f'Metric {metric}: {score:.3f}', flush=True)
-            else:
-                print(f'Metric {metric}: {score}', flush=True)
 
 if __name__ == "__main__":
     main()
