@@ -1,8 +1,9 @@
 """
-This file contains the model suite training class object allowing full control over loading, training, and infering a specific model.
+This file contains the model suite training class object allowing full control
+over loading, training, and infering a specific model.
     @author:         Christoph S. Metzner
     @date:           06/17/2024
-    @last modified:  06/28/2024
+    @last modified:  07/01/2024
 """
 
 
@@ -10,6 +11,7 @@ This file contains the model suite training class object allowing full control o
 # built-in
 import os
 import sys
+import csv
 import json
 import random
 import yaml
@@ -28,9 +30,9 @@ import pandas as pd
 # custom
 from models import CNN
 from command_line_args import create_args_parser
-from training import Trainer 
+from training import Trainer
 from dataloaders import GenericDataloader
-from utils import compute_performance_metrics 
+from utils import compute_performance_metrics
 
 # Set path to root project
 try:
@@ -66,9 +68,12 @@ class ModelSuite:
         self._model_name = ''
         self._time_model_init = datetime.now().strftime('%Y%m%d%H%M%S')
 
-
-    def _fetch_data(self, dataset: str, doc_max_len: int, splits: List[str] = ['train', 'val', 'test']):
-        
+    def _fetch_data(
+            self,
+            dataset: str,
+            doc_max_len: int,
+            splits: List[str] = ['train', 'val', 'test']
+    ):
         """
         Method that fetches the specified dataset.
 
@@ -130,7 +135,7 @@ class ModelSuite:
             Return
             ------
             np.array
-                Array containing the attention masks 
+                Array containing the attention masks
             """
             att_mask = np.zeros(doc_max_len)
             x = x[:doc_max_len]
@@ -151,11 +156,15 @@ class ModelSuite:
             )
 
             df_split['X_padded'] = df_split.apply(
-                lambda x: pad_sequence(x=np.array(x.X), doc_max_len=doc_max_len),
+                lambda x: pad_sequence(
+                    x=np.array(x.X),
+                    doc_max_len=doc_max_len
+                ),
                 axis=1
             )
             df_split['X_att_mask'] = df_split.apply(
-                lambda x: generate_att_mask(x=np.array(x.X), doc_max_len=doc_max_len),
+                lambda x: generate_att_mask(
+                    x=np.array(x.X), doc_max_len=doc_max_len),
                 axis=1
             )
 
@@ -166,11 +175,17 @@ class ModelSuite:
             data[split]['Y'] = y
         return data
 
-    def _fit_model_config(self, config_args: Dict[str, Union[str, bool, float]]):
+    def _fit_model_config(
+            self,
+            config_args: Dict[str, Union[str, bool, float]]
+    ):
         with open(os.path.join(os.getcwd(), 'models_config.yml'), 'r') as f:
             model_config = yaml.safe_load(stream=f)
 
-        with open(os.path.join(self._paths_dict['path_dataset'], f'{self._dataset}_id2label.json'), 'r') as f:
+        with open(os.path.join(
+            self._paths_dict['path_dataset'],
+            f'{self._dataset}_id2label.json'
+        ), 'r') as f:
             id2label = json.load(f)
 
         # Update train_kwargs
@@ -229,15 +244,15 @@ class ModelSuite:
         model.to(self._device)
 
         trainer = Trainer(
-            model = model,
-            model_type = self._model_type,
-            model_name = self._model_name,
-            train_kwargs = train_kwargs,
-            paths_dict = self._paths_dict,
-            debugging = debugging,
-            checkpoint = checkpoint,
-            ddp_training = False,
-            device = self._device
+            model=model,
+            model_type=self._model_type,
+            model_name=self._model_name,
+            train_kwargs=train_kwargs,
+            paths_dict=self._paths_dict,
+            debugging=debugging,
+            checkpoint=checkpoint,
+            ddp_training=False,
+            device=self._device
         )
         return trainer
 
@@ -254,8 +269,8 @@ class ModelSuite:
         val_dataset = dataloader(X=val_data['X'], Y=val_data['Y'])
 
         train_loader = DataLoader(
-            dataset = train_dataset,
-            batch_size = train_kwargs['batch_size'],
+            dataset=train_dataset,
+            batch_size=train_kwargs['batch_size'],
             num_workers=2,
             pin_memory=True,
             prefetch_factor=2,
@@ -263,8 +278,8 @@ class ModelSuite:
         )
 
         val_loader = DataLoader(
-            dataset = val_dataset,
-            batch_size = train_kwargs['batch_size'],
+            dataset=val_dataset,
+            batch_size=train_kwargs['batch_size'],
             num_workers=2,
             pin_memory=True,
             prefetch_factor=2,
@@ -277,9 +292,16 @@ class ModelSuite:
         print(f'Training time: {end_time_training - start_time_training}', flush=True)
         # Here add delete checkpointing
         # Training complete - deleting last checkpoint
-        if os.path.exists(os.path.join(self._paths_dict['path_models'], f'{self._model_name}_checkpoint.tar')):
-            print('Training of model complete - deleting last training checkpoint!')
-            os.remove(os.path.join(self._paths_dict['path_models'], f'{self._model_name}_checkpoint.tar'))
+        if os.path.exists(os.path.join(
+                self._paths_dict['path_models'],
+                f'{self._model_name}_checkpoint.tar')
+        ):
+            print('Training complete - deleting last training checkpoint!')
+            os.remove(os.path.join(
+                self._paths_dict['path_models'],
+                f'{self._model_name}_checkpoint.tar'
+                )
+            )
 
     def _eval_model(
         self,
@@ -292,8 +314,8 @@ class ModelSuite:
         inference_dataset = dataloader(X=inference_data['X'], Y=inference_data['Y'])
 
         inference_loader = DataLoader(
-            dataset = inference_dataset,
-            batch_size = train_kwargs['batch_size'],
+            dataset=inference_dataset,
+            batch_size=train_kwargs['batch_size'],
             num_workers=2,
             pin_memory=True,
             prefetch_factor=2,
@@ -312,7 +334,42 @@ class ModelSuite:
         model_config,
         inference_data
     ):
-        return 0
+        # Creating dataframe with model scores from dict
+        d = {
+            # Model Suite parameters
+            'dataset': [model_config['model_suite']['dataset']],
+            'split': [inference_data],
+            'experiment_name': [model_config['model_suite']['experiment_name']],
+            'model_description': [model_config['model_suite']['model_description']],
+            'model_type': [model_config['model_suite']['model_type']],
+            'seed': [model_config['model_suite']['seed']],
+            'model_time_init': [model_config['model_suite']['time_model_init']],
+            # train arguments
+            'doc_max_len': [model_config['train_kwargs']['doc_max_len']],
+            'batch_size': [model_config['train_kwargs']['batch_size']],
+            'epochs': [model_config['train_kwargs']['epochs']],
+            'patience': [model_config['train_kwargs']['patience']],
+            'learning_rate': [model_config['train_kwargs']['learning_rate']],
+            'frequent_validation': [model_config['train_kwargs']['frequent_validation']],
+            'n_steps': [model_config['train_kwargs']['n_steps']],
+            # model specific arguments
+            'hidden_size': [model_config['model_kwargs'][self._model_type]['hidden_size']],
+            'dropout_prob': [model_config['model_kwargs'][self._model_type]['dropout_prob']],
+            'logits_mechanism': [model_config['model_kwargs'][self._model_type]['logits_mechanism']],
+            # Scores
+            'f1_macro': [metrics['f1_macro']],
+            'f1_micro': [metrics['f1_micro']],
+            'accuracy': [metrics['accuracy']]
+        }
+
+        df = pd.DataFrame.from_dict(d) #columns=headers, data=values)
+
+        if os.path.exists(os.path.join(self._paths_dict['path_results'], 'scores.xlsx')):
+            df_excel = pd.read_excel(os.path.join(self._paths_dict['path_results'], 'scores.xlsx'))
+            result = pd.concat([df_excel, df], ignore_index=True)
+            result.to_excel(os.path.join(self._paths_dict['path_results'], 'scores.xlsx'), index=False)
+        else:
+            df.to_excel(os.path.join(self._paths_dict['path_results'], 'scores.xlsx'), header=True)
 
     def _update_model_suite_attributes(self, model_config: Dict):
         self._experiment_name = model_config['model_suite']['experiment_name']
@@ -322,7 +379,6 @@ class ModelSuite:
         self._seed = model_config['model_suite']['seed']
         self._time_model_init = model_config['model_suite']['time_model_init']
         self._model_name = model_config['model_suite']['model_name']
-
 
     def eval_model(self, path_trained_model, debugging, inference_data):
         # Get model name from provided path
@@ -338,9 +394,9 @@ class ModelSuite:
         model.to(self._device)
 
         trainer = self._init_trainer(
-            model = model,
-            train_kwargs = model_config['train_kwargs'],
-            debugging = debugging,
+            model=model,
+            train_kwargs=model_config['train_kwargs'],
+            debugging=debugging,
         )
 
         data = self._fetch_data(dataset=self._dataset, doc_max_len=model_config['train_kwargs']['doc_max_len'])
@@ -348,14 +404,13 @@ class ModelSuite:
         scores = self._eval_model(
             trainer=trainer,
             train_kwargs=model_config['train_kwargs'],
-            inference_data=data[inference_data] #args.inference_data]
+            inference_data=data[inference_data]
         )
 
-
         metrics = compute_performance_metrics(
-            y_trues = scores['y_trues'],
-            y_preds = scores['y_preds'],
-            num_classes = model_config['model_kwargs'][self._model_type]['num_classes']
+            y_trues=scores['y_trues'],
+            y_preds=scores['y_preds'],
+            num_classes=model_config['model_kwargs'][self._model_type]['num_classes']
         )
 
         for metric, score in metrics.items():
@@ -363,7 +418,7 @@ class ModelSuite:
                 print(f'Metric {metric}: {score:.3f}', flush=True)
             else:
                 print(f'Metric {metric}: {score}', flush=True)
-        return scores, metrics
+        return scores, metrics, model_config
 
     def train_model(
         self,
@@ -401,11 +456,11 @@ class ModelSuite:
             self._update_model_suite_attributes(model_config)
 
             model = self._init_model(model_kwargs=model_config['model_kwargs'][self._model_type])
-            checkpoint = torch.load(from_checkpoint, map_location=torch.device(self._device)) 
+            checkpoint = torch.load(from_checkpoint, map_location=torch.device(self._device))
 
         trainer = self._init_trainer(
-            model = model,
-            train_kwargs = model_config['train_kwargs'],
+            model=model,
+            train_kwargs=model_config['train_kwargs'],
             checkpoint=checkpoint,
             debugging=debugging,
         )
@@ -421,7 +476,7 @@ class ModelSuite:
         )
 
         if eval_model:
-            # Load best performing model  
+            # Load best performing model
             model.load_state_dict(torch.load(os.path.join(self._paths_dict['path_models'], f'{self._model_name}.pt'), map_location=torch.device(self._device)))
             model.to(self._device)
             trainer._model = model
@@ -433,17 +488,18 @@ class ModelSuite:
             )
 
             metrics = compute_performance_metrics(
-                y_trues = scores['y_trues'],
-                y_preds = scores['y_preds'],
-                num_classes = model_config['model_kwargs'][self._model_type]['num_classes']
+                y_trues=scores['y_trues'],
+                y_preds=scores['y_preds'],
+                num_classes=model_config['model_kwargs'][self._model_type]['num_classes']
             )
             for metric, score in metrics.items():
                 if metric != 'f1_ind':
                     print(f'Metric {metric}: {score:.3f}', flush=True)
                 else:
                     print(f'Metric {metric}: {score}', flush=True)
-            return scores, metrics
+            return scores, metrics, model_config
         return 0, 0
+
 
 def main():
     # Setup command line arguments
@@ -454,7 +510,6 @@ def main():
     np.random.seed(args.seed)
     random.seed(args.seed)
     torch.manual_seed(args.seed)
-
 
     # Check that MPS is available
     if torch.cuda.is_available():
@@ -484,14 +539,14 @@ def main():
 
     # Initialize ModelSuite class
     model_suite = ModelSuite(
-        experiment_name = args.experiment_name,
-        model_description = args.model_description,
-        paths_dict = paths_dict,
-        model_type = args.model_type,
-        transformer_model = transformer_model,
-        dataset = args.dataset,
-        seed = args.seed,
-        device = device,
+        experiment_name=args.experiment_name,
+        model_description=args.model_description,
+        paths_dict=paths_dict,
+        model_type=args.model_type,
+        transformer_model=transformer_model,
+        dataset=args.dataset,
+        seed=args.seed,
+        device=device,
     )
 
     # Fit model configuration file
@@ -519,23 +574,44 @@ def main():
         from_checkpoint = args.from_checkpoint
 
     if args.train_model:
-        scores, metrics = model_suite.train_model(
+        scores, metrics, model_config = model_suite.train_model(
             from_checkpoint=from_checkpoint,
             command_line_args=command_line_args,
             debugging=args.debugging,
             inference_data=args.inference_data,
             eval_model=args.eval_model
         )
+        if args.eval_model:
+            if args.store_scores:
+                pass
+            if args.store_performance_scores:
+                model_suite.store_scores(
+                    metrics,
+                    model_config,
+                    args.inference_data
+                )
     else:
         if args.path_trained_model is None:
             raise ValueError("Provide absolute path to trained model\
                              utilize args.path_trained_model!")
 
-        scores, metrics = model_suite.eval_model(
+        scores, metrics, model_config = model_suite.eval_model(
             path_trained_model=args.path_trained_model,
             debugging=args.debugging,
             inference_data=args.inference_data
         )
+
+        if args.store_scores:
+            # call function store scores
+            pass
+
+        if args.store_performance_scores:
+            model_suite.store_scores(
+                metrics,
+                model_config,
+                args.inference_data
+            )
+
 
 if __name__ == "__main__":
     main()
