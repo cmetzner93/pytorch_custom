@@ -3,7 +3,7 @@ This file contains source code handling the command line arguments controlling
 the usage of the ModelSuite class.
     @author: Christoph S. Metzner
     @date created:  06/22/2024
-    @last modified: 06/28/2024
+    @last modified: 07/01/2024
 """
 
 # Import libraries
@@ -143,12 +143,24 @@ def create_args_parser():
         help='Path to trained model - make sure that its model_config file \
               is in the same directory'
     )
-    
     parser.add_argument(
         '--from_checkpoint',
         type=str,
         help='Absolute path to model checkpoint - make sure that its \
         model_config file is in the smae directory.'
+    )
+    parser.add_argument(
+        '--store_scores',
+        type=eval_bool_command,
+        default=False,
+        help='Flag to indicate whether output (predictions/probabilities) \
+              need to be stored.'
+    )
+    parser.add_argument(
+        '--store_performance_scores',
+        type=eval_bool_command,
+        default=True,
+        help='Flag to indicate whether performance scores are stored.'
     )
     return parser
 
